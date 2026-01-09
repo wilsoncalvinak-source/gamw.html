@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VOID_RUNNER // SIGNAL_LOST</title>
+    <style>
+        :root { --p-green: #00ff41; --p-red: #ff0000; --bg: #000; }
+        body { background: var(--bg); color: var(--p-green); font-family: 'Courier New', monospace; margin: 0; overflow: hidden; height: 100vh; }
+        
+        #game-window { max-width: 900px; margin: auto; height: 100vh; display: flex; flex-direction: column; padding: 20px; position: relative; z-index: 5; }
+        #output { flex: 1; overflow-y: auto; padding: 20px 0; font-size: 1.1rem; }
+        .input-area { display: flex; border-top: 1px solid #1a1a1a; padding: 20px 0; }
+        input { background: transparent; border: none; color: var(--p-green); font-family: inherit; font-size: 1.2rem; flex: 1; outline: none; }
+
+        /* JUMPSCARE OVERLAY */
+        #jumpscare { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: white; display: none; z-index: 100; 
+            justify-content: center; align-items: center;
+        }
+        .face { font-size: 15rem; color: black; font-weight: bold; transform: scale(1.5); }
+
+        /* GLITCH EFFECTS */
+        .glitch { animation: glitch-msg 0.1s infinite; color: var(--p-red); font-weight: bold; }
+        @keyframes glitch-msg {
+            0% { transform: translate(2px, -2px); opacity: 1; }
+            50% { transform: translate(-2px, 2px); opacity: 0.8; }
+            100% { transform: translate(1px, 1px); opacity: 1; }
+        }
+        
+        .static { position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.05; pointer-events: none; z-index: 1; }
+    </style>
+</head>
+<body>
+    <div id="jumpscare"><div class="face">Σ(O_O)</div></div>
+    <canvas id="staticCanvas" class="static"></canvas>
+
+    <div id="game-window">
+        <div style="display:flex; justify-content:space-between; border-bottom: 1px solid #333;">
+            <span id="loc">SIGNAL SEARCHING...</span>
+            <span id="san">SANITY: 100%</span>
+        </div>
+        <div id="output"></div>
+        <div class="input-area">
+            <span>>&nbsp;</span><input type="text" id="userInput" autofocus autocomplete="off">
+        </div>
+    </div>
+
+<script>
+const game = {
+    sanity: 100,
+    currentRoom: 'cryo',
+    inventory: [],
+    wrongWayCount: 0,
+
+    rooms: {
+        'cryo': { name: "CRYO-STORAGE B", desc: "The pods are open. One contains a mirror. Your reflection is missing.", exits: { north: 'hallway', east: 'morgue' } },
+        'morgue': { name: "BIO-LAB", desc: "Drawers for bodies. One is vibrating. Type 'open' if you dare.", exits: { west: 'cryo', north: 'decon' } },
+        'decon': { name: "DECONTAMINATION", desc: "The floor is slick with green bile. The emergency claxon is muted.", exits: { south: 'morgue', west: 'hallway' } },
+        'hallway': { name: "THE VEIN", desc: "A meat-like substance covers the walls. It's warm.", exits: { south: 'cryo', north: 'bridge', east: 'decon', west: 'engine' } },
+        'engine': { name: "ENGINE ROOM", desc: "The roar of the reactor sounds like a thousand people screaming at once.", exits: { east: 'hallway' }, items: ['core_key'] },
+        'bridge': { name: "COMMAND BRIDGE", desc: "You see the Captain. He is fused into the pilot's seat.", exits: { south: 'hallway' }, locked: true, key: 'core_key' }
+    },
+
+    init() {
+        this.log("STATION 9 NEURAL UPLINK... ONLINE.", "meta");
+        this.updateRoom();
+        this.drawStatic();
+    },
+
+    log(msg, type = "") {
+        const out = document.getElementById('output');
+        const p = document.createElement('p');
+        p.innerHTML = msg;
+        if(type) p.className = type;
+        out.appendChild(p);
+        out.scrollTop = out.scrollHeight;
+    },
+
+    triggerJumpscare() {
+        const js = document.getElementById('jumpscare');
+        js.style.display = 'flex';
+        // Simulated "Noise"
+        const audio = new AudioContext();
+        const osc = audio.createOscillator();
+        const gain = audio.createGain();
+        osc.connect(gain); gain.connect(audio.destination);
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audio.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, audio.currentTime + 0.5);
+        osc.start(); osc.stop(audio.currentTime + 0.5);
+
+        setTimeout(() => { js.style.display = 'none'; }, 150);
+        this.sanity -= 15;
+        this.log("AN ERROR OCCURRED IN YOUR BRAIN.", "glitch");
+        this.updateUI();
+    },
+
+    move(dir) {
+        const room = this.rooms[this.currentRoom];
+        if (room.exits[dir]) {
+            const target = this.rooms[room.exits[dir]];
+            if (target.locked && !this.inventory.includes(target.key)) {
+                this.log("THE DOOR REQUIRES THE [CORE_KEY].", "glitch");
+                this.triggerJumpscare();
+            } else {
+                this.currentRoom = room.exits[dir];
+                this.wrongWayCount = 0;
+                this.updateRoom();
+            }
+        } else {
+            this.wrongWayCount++;
+            this.triggerJumpscare();
+            if(this.wrongWayCount > 2) {
+                this.log("SOMETHING IS WATCHING YOU FAIL.", "glitch");
+            }
+        }
+    },
+
+    updateRoom() {
+        const room = this.rooms[this.currentRoom];
+        this.log(`<br><b style="color:white">${room.name}</b>`);
+        
+        let text = room.desc;
+        if (this.sanity < 60) {
+            text = text.replace(/[aeiou]/g, '█'); // Glitch effect on vowels
+            this.log("WARNING: OPTIC NERVE DEGRADING", "glitch");
+        }
+        this.log(text);
+        this.updateUI();
+    },
+
+    updateUI() {
+        document.getElementById('loc').innerText = this.rooms[this.currentRoom].name;
+        document.getElementById('san').innerText = `SANITY: ${this.sanity}%`;
+        if(this.sanity <= 0) {
+            document.body.innerHTML = "<div class='glitch' style='font-size:5rem; text-align:center; padding-top:20vh;'>YOU ARE PART OF THE STATION NOW</div>";
+        }
+    },
+
+    drawStatic() {
+        const canvas = document.getElementById('staticCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        setInterval(() => {
+            const idata = ctx.createImageData(canvas.width, canvas.height);
+            for (let i = 0; i < idata.data.length; i += 4) {
+                const v = Math.random() * 255;
+                idata.data[i] = idata.data[i+1] = idata.data[i+2] = v;
+                idata.data[i+3] = 255;
+            }
+            ctx.putImageData(idata, 0, 0);
+        }, 50);
+    }
+};
+
+document.getElementById('userInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const val = e.target.value.toLowerCase();
+        e.target.value = '';
+        if(['north','south','east','west'].includes(val)) game.move(val);
+        else if(val === 'take core_key') {
+            game.inventory.push('core_key');
+            game.log("KEY RETRIEVED.");
+        }
+        else game.log("INVALID INPUT.");
+    }
+});
+
+game.init();
+</script>
+</body>
+</html>
