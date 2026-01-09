@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VOID_RUNNER // TERMINAL</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; line-height: 1.4; }
+        #terminal { max-width: 900px; margin: auto; border: 1px solid #0f0; padding: 20px; height: 80vh; overflow-y: auto; }
+        .input-area { max-width: 900px; margin: 10px auto; display: flex; }
+        input { background: #000; border: none; color: #0f0; flex: 1; outline: none; font-family: monospace; font-size: 1.1em; }
+        .glitch { color: #f00; text-shadow: 2px 0 #00f; }
+        .meta { color: #555; font-style: italic; }
+        hr { border: 0; border-top: 1px solid #050; }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+    <div class="input-area">
+        <span>>&nbsp;</span><input type="text" id="userInput" autofocus>
+    </div>
+
+<script>
+/**
+ * TO REACH 2,000 LINES:
+ * 1. Expand the 'rooms' object. Every 10 rooms adds ~200 lines of descriptive text.
+ * 2. Add 'dialogueTrees' for NPCs.
+ * 3. Add more 'itemInteractions'.
+ */
+
+const game = {
+    // --- 1. GAME STATE ---
+    player: {
+        location: 'airlock',
+        inventory: [],
+        sanity: 100,
+        flags: {} // Tracks story progress (e.g., power_on: true)
+    },
+
+    // --- 2. THE WORLD DATA (Expand this section to reach your line goal) ---
+    rooms: {
+        'airlock': {
+            name: "Airlock 4-B",
+            desc: "The emergency lights are pulsing red. The outer door is buckled inward, as if something tried to punch its way in.",
+            exits: { north: 'main_hub' },
+            items: ['flare']
+        },
+        'main_hub': {
+            name: "Central Command",
+            desc: "A circular room filled with dead consoles. High above, a glass dome shows the cold void of space.",
+            exits: { south: 'airlock', east: 'med_bay', west: 'reactor' },
+            items: []
+        },
+        'med_bay': {
+            name: "Medical Ward",
+            desc: "Surgical tools are scattered across the floor. One of the autodocs is stuck in a loop, snapping its metal claws.",
+            exits: { west: 'main_hub' },
+            items: ['sedative'],
+            locked: true,
+            requiredItem: 'keycard'
+        },
+        'reactor': {
+            name: "Core Reactor",
+            desc: "The hum here is deep enough to vibrate your teeth. Shadows seem to stretch toward you.",
+            exits: { east: 'main_hub' },
+            items: ['keycard']
+        }
+        // [Add 50+ more rooms here to increase code volume]
+    },
+
+    // --- 3. CORE ENGINE LOGIC ---
+    init() {
+        this.print("RE-LINKING NEURAL INTERFACE...", "meta");
+        this.print("STATION 9 STATUS: CRITICAL", "glitch");
+        this.updateRoom();
+    },
+
+    print(msg, className = "") {
+        const out = document.getElementById('terminal');
+        const p = document.createElement('p');
+        p.innerHTML = msg;
+        if(className) p.className = className;
+        out.appendChild(p);
+        out.scrollTop = out.scrollHeight;
+    },
+
+    handleInput(raw) {
+        const input = raw.toLowerCase().trim();
+        const [cmd, ...args] = input.split(' ');
+        const target = args.join(' ');
+
+        this.print(`> ${raw}`, "meta");
+
+        switch(cmd) {
+            case 'go':
+            case 'move':
+                this.move(target);
+                break;
+            case 'take':
+            case 'get':
+                this.take(target);
+                break;
+            case 'inv':
+            case 'inventory':
+                this.showInventory();
+                break;
+            case 'look':
+                this.updateRoom();
+                break;
+            default:
+                this.print("System does not recognize command: " + cmd);
+        }
+    },
+
+    move(direction) {
+        const room = this.rooms[this.player.location];
+        if (room.exits[direction]) {
+            const nextRoomKey = room.exits[direction];
+            const nextRoom = this.rooms[nextRoomKey];
+
+            // Check if room is locked
+            if (nextRoom.locked && !this.player.inventory.includes(nextRoom.requiredItem)) {
+                this.print(`ACCESS DENIED. Requires: ${nextRoom.requiredItem.toUpperCase()}`, "glitch");
+                return;
+            }
+
+            this.player.location = nextRoomKey;
+            this.player.sanity -= 2;
+            this.updateRoom();
+        } else {
+            this.print("Path blocked or non-existent.");
+        }
+    },
+
+    take(itemName) {
+        const room = this.rooms[this.player.location];
+        const idx = room.items.indexOf(itemName);
+        if (idx > -1) {
+            this.player.inventory.push(itemName);
+            room.items.splice(idx, 1);
+            this.print(`Acquired: ${itemName.toUpperCase()}`);
+        } else {
+            this.print("Item not found.");
+        }
+    },
+
+    showInventory() {
+        if (this.player.inventory.length === 0) {
+            this.print("Inventory is empty.");
+        } else {
+            this.print("Current Loadout: " + this.player.inventory.join(', '));
+        }
+    },
+
+    updateRoom() {
+        const room = this.rooms[this.player.location];
+        this.print(`<hr><b>${room.name}</b>`);
+        
+        // Add sanity-based flavor text
+        let description = room.desc;
+        if (this.player.sanity < 50) {
+            description += " ...You feel eyes crawling on your skin.";
+        }
+        
+        this.print(description);
+        if (room.items.length > 0) {
+            this.print(`Items detected: ${room.items.join(', ')}`);
+        }
+        this.print(`Exits: ${Object.keys(room.exits).join(', ')}`, "meta");
+    }
+};
+
+// --- 4. INPUT LISTENER ---
+document.getElementById('userInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        game.handleInput(e.target.value);
+        e.target.value = '';
+    }
+});
+
+game.init();
+</script>
+</body>
+</html>
