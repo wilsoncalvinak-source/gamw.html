@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TERMINAL 9 // CRITICAL_ERROR</title>
+    <style>
+        :root { --p-green: #00ff41; --p-red: #ff0000; --bg: #000; }
+        body { background: var(--bg); color: var(--p-green); font-family: 'Courier New', monospace; margin: 0; overflow: hidden; height: 100vh; }
+        
+        #game-window { max-width: 900px; margin: auto; height: 100vh; display: flex; flex-direction: column; padding: 20px; position: relative; z-index: 5; }
+        #output { flex: 1; overflow-y: auto; padding: 20px 0; font-size: 1.1rem; line-height: 1.6; }
+        .input-area { display: flex; border-top: 1px solid #1a1a1a; padding: 20px 0; }
+        input { background: transparent; border: none; color: var(--p-green); font-family: inherit; font-size: 1.2rem; flex: 1; outline: none; }
+
+        /* JUMPSCARE OVERLAY */
+        #jumpscare { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: #000; display: none; z-index: 100; 
+            justify-content: center; align-items: center;
+        }
+        #jumpscare img { width: 100%; height: 100%; object-fit: cover; filter: contrast(180%) brightness(70%) saturate(150%); }
+
+        /* BLOOD EFFECT */
+        #blood-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 20%, rgba(138, 0, 0, 0.8) 100%);
+            display: none; pointer-events: none; z-index: 90;
+        }
+
+        .glitch { color: var(--p-red); animation: shake 0.05s infinite; font-weight: bold; text-shadow: 2px 2px #000; }
+        @keyframes shake {
+            0% { transform: translate(3px, 3px); }
+            50% { transform: translate(-3px, -3px); filter: invert(1); }
+            100% { transform: translate(0); }
+        }
+        
+        canvas { position: fixed; top: 0; left: 0; opacity: 0.2; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="jumpscare"><img src="jumpscare.jpg"></div>
+    <div id="blood-overlay"></div>
+    <canvas id="staticCanvas"></canvas>
+
+    <div id="game-window">
+        <div style="display:flex; justify-content:space-between; border-bottom: 1px solid #333; padding-bottom: 5px;">
+            <span>SECTOR: <span id="loc">1</span>/50</span>
+            <span id="threat-label">SIGNAL: STABLE</span>
+        </div>
+        <div id="output"></div>
+        <div class="input-area">
+            <span>>&nbsp;</span><input type="text" id="userInput" autofocus autocomplete="off">
+        </div>
+    </div>
+
+<script>
+const game = {
+    currentSector: 1,
+    stalkerSector: 15,
+    isAlive: true,
+
+    init() {
+        this.log("BIO-LINK ESTABLISHED. MOVE TO SECTOR 50.", "meta");
+        this.log("Type 'north' to advance, 'south' to retreat, 'hide' to stay still.");
+        this.updateRoom();
+        this.drawStatic();
+    },
+
+    log(msg, type = "") {
+        const out = document.getElementById('output');
+        const p = document.createElement('p');
+        p.innerHTML = msg;
+        if(type) p.className = type;
+        out.appendChild(p);
+        out.scrollTop = out.scrollHeight;
+    },
+
+    // --- ENHANCED DISSONANT SOUND ENGINE ---
+    playNightmareSound() {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const createLayer = (type, freq, start, end) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(end, audioCtx.currentTime + 1.5);
+            
+            gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.5);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1.5);
+        };
+
+        // Layer 1: The Low Growl
+        createLayer('sawtooth', 40, 40, 20);
+        // Layer 2: The Metallic Shriek (Dissonant)
+        createLayer('square', 880, 880, 1500);
+        // Layer 3: The Glitch (Unstable)
+        createLayer('triangle', 440, 440, 3000);
+    },
+
+    triggerJumpscare() {
+        if (!this.isAlive) return;
+        this.isAlive = false;
+        
+        document.getElementById('jumpscare').style.display = 'flex';
+        document.getElementById('blood-overlay').style.display = 'block';
+        
+        this.playNightmareSound();
+        
+        // Final Screen Shake
+        document.body.style.animation = "shake 0.1s infinite";
+
+        setTimeout(() => {
+            document.body.innerHTML = "<div style='color:white; background:black; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:serif; text-align:center;'><h1>THERE IS NOTHING LEFT OF YOU</h1><p style='color:red;'>CONNECTION TERMINATED</p></div>";
+        }, 2000);
+    },
+
+    process(input) {
+        if (!this.isAlive) return;
+        const cmd = input.toLowerCase().trim();
+        
+        if (cmd === 'north' || cmd === 'n') this.currentSector++;
+        else if (cmd === 'south' || cmd === 's') this.currentSector = Math.max(1, this.currentSector - 1);
+        else if (cmd === 'hide') this.log("You stop moving. You can hear them scraping the walls outside...");
+        else this.log("ERROR: UNKNOWN ACTION.");
+
+        // Stalker AI: Always moves toward you
+        if (this.stalkerSector < this.currentSector) this.stalkerSector++;
+        else if (this.stalkerSector > this.currentSector) this.stalkerSector--;
+
+        if (this.currentSector === this.stalkerSector) {
+            this.triggerJumpscare();
+        } else {
+            this.updateRoom();
+        }
+    },
+
+    updateRoom() {
+        const dist = Math.abs(this.currentSector - this.stalkerSector);
+        const label = document.getElementById('threat-label');
+        
+        document.getElementById('loc').innerText = this.currentSector;
+
+        if (dist <= 1) {
+            label.innerText = "SIGNAL: CORRUPTED";
+            label.className = "glitch";
+            this.log("IT IS IN THE VENTS ABOVE YOU.", "glitch");
+        } else if (dist <= 3) {
+            label.innerText = "SIGNAL: WEAK";
+            label.style.color = "orange";
+            this.log("You hear the sound of bone dragging on metal.");
+        } else {
+            label.innerText = "SIGNAL: STABLE";
+            label.style.color = "var(--p-green)";
+        }
+
+        this.log(`<br><b>SECTOR ${this.currentSector}</b>`);
+        if (this.currentSector >= 50) {
+            this.log("THE DOOR IS OPEN. LIGHT. FINALLY.");
+            this.isAlive = false;
+        }
+    },
+
+    drawStatic() {
+        const canvas = document.getElementById('staticCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        setInterval(() => {
+            const idata = ctx.createImageData(canvas.width, canvas.height);
+            for (let i = 0; i < idata.data.length; i += 4) {
+                const v = Math.random() * 255;
+                idata.data[i] = idata.data[i+1] = idata.data[i+2] = v;
+                idata.data[i+3] = 255;
+            }
+            ctx.putImageData(idata, 0, 0);
+        }, 50);
+    }
+};
+
+document.getElementById('userInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        game.process(e.target.value);
+        e.target.value = '';
+    }
+});
+
+game.init();
+</script>
+</body>
+</html>
